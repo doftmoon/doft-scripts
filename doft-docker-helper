@@ -140,7 +140,7 @@ oracle_container() {
       -e ORACLE_DATABASE="PDB1" \
       gvenzl/oracle-free:latest
 
-   info "The database created!"
+   info "The database created"
 }
 
 mssql_container() {
@@ -149,7 +149,9 @@ mssql_container() {
    docker run -d \
       --name "$mssql_container_name" \
       -p "$MSSQL_PORT":"$MSSQL_PORT" \
+      mcr.microsoft.com/mssql/server:2022-latest
 
+   info "Sql Server created"
 }
 
 mongodb_container() {
@@ -157,7 +159,10 @@ mongodb_container() {
    local mongodb_container_name="test-mongodb"
    docker run -d \
       --name "$mongodb_container_name" \
-      -p "$MONGO_PORT"
+      -p "$MONGODB_PORT:$MONGODB_PORT"
+      mongo:8.0.15
+
+   info "MongoDB created"
 }
 
 pick_db() {
