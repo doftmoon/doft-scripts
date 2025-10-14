@@ -1,6 +1,6 @@
+#!/bin/bash
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 doftmoon
-#!/bin/bash
 
 target_dir="."
 #param -r to del /build and Makefile

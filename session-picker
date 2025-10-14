@@ -1,6 +1,6 @@
+#!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 doftmoon
-#!/usr/bin/env bash
 # put in ~/.local/bin/session-picker
 # written by doftmoon to manage the system according to the env
 set -euo pipefail

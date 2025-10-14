@@ -1,29 +1,46 @@
+#!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 doftmoon
-#!/usr/bin/env bash
 set -euo pipefail
 
-DB_PASS="1234Qwerty"
-DB_USER="doft"
+DB_PASS="1313"
+DB_USER="testuser"
 DB_USER_PASS="1313"
 DB_NAME="test"
 
-PG_PORT="5432"
-MYSQL_PORT="3306"
-ORA_PORT="1521"
-MSSQL_PORT=""
-MONGO_PORT=""
+# prefix is used to ensure no other container matches the test containers
+readonly PREFIX="test"
+
+# what os port is db port forwarded to
+# in case the host os already runs db instance on standard port change it
+readonly PG_PORT="5432"
+readonly MYSQL_PORT="3306"
+readonly ORA_PORT="1521"
+readonly MSSQL_PORT="1433"
+readonly MONGO_PORT="8081"
 
 info() {
-   echo "INFO: $1"
+   if command -v gum &>/dev/null; then
+      gum style --foreground 10 "$1"
+   else
+      echo -e "\e[32mINFO:\e[0m $1"
+   fi
 }
 
 warn() {
-   echo "WARNING: $1"
+   if command -v gum &>/dev/null; then
+      gum style --foreground 11 "$1"
+   else
+      echo -e "\e[33mWARNING:\e[0m $1"
+   fi
 }
 
 error() {
-   echo "ERROR: $1"
+   if command -v gum &>/dev/null; then
+      gum style --foreground 9 "$1" >&2
+   else
+      echo -e "\e[31mERROR:\e[0m $1" >&2
+   fi
    exit 1
 }
 
@@ -36,33 +53,17 @@ confirm() {
 }
 
 choose() {
+   local prompt="$1"
+   shift
    if command -v gum &>/dev/null; then
-      gum choose --cursor.foreground 12 --header="Make your choice:" --header.foreground 12 "$@"
+      gum choose --cursor.foreground 12 --header="$prompt" --header.foreground 12 "$@"
    elif command -v fzf &>/dev/null; then
       printf "%s\n" "$@" |
-         fzf --prompt='Make your choice: ' \
+         fzf --prompt='$prompt' \
             --height=20% \
             --border --cycle
    else
       select opt in "$@"; do [[ -n "$opt" ]] && { echo "$opt"; break; }; done
-   fi
-}
-
-check_deps() {
-   info "Checking for required tools..."
-   if ! command -v docker &>/dev/null; then
-      error "Docker is not installed. Please install it to continue."
-   fi
-
-   if command -v gum &>/dev/null; then
-      echo "Using gum"
-   elif command -v fzf &>/dev/null; then
-      echo "Using fzf"
-   else
-      warn "Neither 'gum' nor 'fzf' is installed. Use one of them for better experience."
-      if confirm "Install gum?"; then
-         install_deps
-      fi
    fi
 }
 
@@ -74,52 +75,57 @@ install_deps() {
    case $mgr in
       pacman) sudo pacman -S gum --no-confirm ;;
       dnf) sudo dnf install -y gum ;;
-      apt) sudo apt install gum ;;
+      apt) sudo apt install -y gum ;;
       *) error "Cannot install gum automatically" ;;
    esac
    info 'Dependencies installed'
 }
 
+check_deps() {
+   if ! command -v docker &>/dev/null; then
+      error "Docker is not installed. Please install it to continue."
+   fi
+
+   if ! command -v gum &>/dev/null; then
+      warn "'gum' is not installed. It's used for better user experiense"
+      if confirm "Install gum?"; then
+         install_deps
+      fi
+   fi
+}
+
 check_docker_daemon() {
    if ! docker info &>/dev/null; then
-      sudo systemctl start docker.service
-      info "Docker daemon is starting..."
-      sleep 2
+      info "Docker daemon in not started on the standard socket"
+      if confirm "Start docker?"; then
+         sudo systemctl start docker.service
+         info "Docker daemon is starting..."
+         sleep 2
+      else
+         error "Start docker daemon yourself!"
+      fi
    fi
 }
 
-# Checks if container already exists and asks what to do: start, recreate, rm
-check_container() {
-   if ! "docker ps | rg $1"; then
-      local readonly options=(start recreate rm)
-      local choice=$(choose "${options[@]}")
-
-      case "$choice" in
-         start) docker start "$1" ;;
-         recreate) docker rm "$1" ;;
-         rm) docker rm "$1" ;;
-         *) error "unknown" ;;
-      esac
-   fi
-}
-
-postgres_container() {
+run_postgres() {
    info "Starting postgres db container..."
-   local pg_container_name="test-postgres-17"
+   local pg_container_name="$1"
+   local pg_image_tag="$2"
    docker run -d \
       --name "$pg_container_name" \
-      -p "$PG_PORT":"$PG_PORT" \
+      -p "$PG_PORT:5432" \
       -e POSTGRES_PASSWORD="$DB_PASS" \
       -e POSTGRES_USER="$DB_USER" \
       -e POSTGRES_DATABASE="$DB_NAME" \
-      postgres:17.6
+      postgres:"$pg_image_tag"
 
    info "The database created!"
 }
 
-mysql_container() {
+run_mysql() {
    info "Starting mysql db container..."
-   local mysql_container_name="test-mysql-lts"
+   local mysql_container_name="$1"
+   local mysql_image_tag="$2"
    docker run -d \
       --name "$mysql_container_name" \
       -p "$MYSQL_PORT:3306" \
@@ -130,7 +136,7 @@ mysql_container() {
       mysql:lts
 }
 
-oracle_container() {
+run_oracle() {
    info "Starting oracle db container..."
    local ora_container_name="test-oracle-18c"
    docker run -d \
@@ -143,18 +149,20 @@ oracle_container() {
    info "The database created"
 }
 
-mssql_container() {
-   info "Not supported for now"
-   local mssql_container_name="test-mssqlserver-2022"
+run_mssql() {
+   local mssql_container_name="$1"
+   local tag=
    docker run -d \
       --name "$mssql_container_name" \
       -p "$MSSQL_PORT":"$MSSQL_PORT" \
-      mcr.microsoft.com/mssql/server:2022-latest
+      -e ACCEPT_EULA="Y" \
+      -e MSSQL_SA_PASSWORD="$DB_PASS" \
+      mcr.microsoft.com/mssql/server:"$tag"
 
    info "Sql Server created"
 }
 
-mongodb_container() {
+run_mongodb() {
    info "Not supported for now"
    local mongodb_container_name="test-mongodb"
    docker run -d \
@@ -165,18 +173,50 @@ mongodb_container() {
    info "MongoDB created"
 }
 
-pick_db() {
-   local options=(postgres mysql oracle mssql mongodb)
-   local choice=$(choose "${options[@]}")
+container_manager() {
+   local action="$1"
+   local container_name="$2"
+   local tag="$3"
 
-   case "$choice" in
-      postgres) postgres_container ;;
-      mysql) mysql_container ;;
-      oracle) oracle_container ;;
-      mssql) mssql_container ;;
-      mongodb) mongodb_container ;;
-      *) error "No such container template exists." ;;
+   case "$action" in
+      continue) exit 0 ;;
+      recreate) docker rm -f "$container_name" ;;
+      rm) docker rm "$container_name"; exit 0 ;;
+      start) docker start "$container_name"; exit 0 ;;
+      stop) docker stop "$container_name"; exit 0 ;;
+      exit) exit 0 ;;
+      *) error "unknown action" ;;
    esac
+
+   case "$container_name" in
+      "$PREFIX-postgres-$tag") run_postgres "$container_name" "$tag" ;;
+      "$PREFIX-oracle-$tag") run_oracle "$container_name" "$tag" ;;
+      *) error "No such container" ;;
+   esac
+}
+
+# Checks if container already exists and asks what to do: start, recreate, rm
+check_container() {
+   local container_name="$1"
+   local action="continue"
+
+   if docker ps -a --format '{{.Names}}' | grep -q "^$container_name"; then
+      info "Container $container_name already exists!"
+      local state=$(docker inspect --format '{{.State.Status}}' "$container_name")
+
+      if [[ "$state" == "running" ]]; then
+         local options=(recreate rm stop cancel)
+         action=$(choose "What would you like to do?" "${options[@]}")
+      else
+         local options=(recreate rm start cancel)
+         action=$(choose "What would you like to do?" "${options[@]}")
+      fi
+   fi
+   echo "$action"
+}
+
+print_conninfo() {
+echo ""
 }
 
 main() {
@@ -184,7 +224,30 @@ main() {
 
    check_deps
    check_docker_daemon
-   pick_db
+
+   local options=(postgres mysql oracle mssql mongodb exit)
+   local db=$(choose "Select a database:" "${options[@]}")
+   local tag
+
+   case "$db" in
+      postgres)
+         local ver_list=(latest 17.6 16 12)
+         local ver=$(choose "Select Postgres version:" "${ver_list[@]}")
+         tag="$ver"
+         ;;
+      mysql) tag="lts" ;;
+      oracle) tag="18c" ;;
+      mssql) tag="2022-latest" ;;
+      mongodb) tag="8.0.15" ;;
+      exit) info "Exiting"; exit 0 ;;
+      *) error "No such database choice" ;;
+   esac
+
+   local container_name="$PREFIX-$db-$tag"
+   local action=$(check_container "$container_name")
+   container_manager "$action" "$container_name" "$tag"
+
+   info "Setup finished successfully :3"
 }
 
 main

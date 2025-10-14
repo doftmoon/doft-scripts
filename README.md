@@ -6,5 +6,6 @@ one for them.
 
 ## License
 
-Distributed under the **[MIT](https://github.com/doftmoon/doft-scripts/blob/master/LICENSE.md) License**.
+Distributed under the **[MIT](https://github.com/doftmoon/doft-scripts/blob/master/LICENSE) License**.
+
 Copyright (c) 2025 doftmoon

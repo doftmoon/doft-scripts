@@ -1,6 +1,6 @@
+#!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 doftmoon
-#!/usr/bin/env bash
 #
 # Small script to softlink all the scripts in the current folder
 # Script should work on any bash-default distro
