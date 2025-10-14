@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 doftmoon
+#!/usr/bin/env bash
+# put in ~/.local/lib/doftmoon-shell-utils
+
+SAKURA='\033[38;2;219;184;213m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+info() {
+   echo -e "${SAKURA}INFO: $1${NC}"
+}
+
+error() {
+   echo -e "${RED}ERROR:${NC} $1" >&2
+   exit 1
+}
+
+confirm() {
+
+}
+
+choose() {
+   if command -v gum &>/dev/null; then
+      gum choose
+   elif command -v fzf &>/dev/null; then
+      echo "fzf"
+   else
+      select opt in "$@"; do done
+   fi
+}
+
+ensure_not_root() {
+   if [[ "$EUID" -eq 0 ]]; then
+      error "Don't run as root!"
+   fi
+}
+
+detect_package_manager() {
+   local pkg_manager=''
+
+   if command -v apt-get &>/dev/null; then
+      pkg_manager='apt'
+   elif command -v pacman &>/dev/null; then
+      pkg_manager='pacman'
+   elif command -v dnf &>/dev/null; then
+      pkg_manager='dnf'
+   elif command -v apk &>/dev/null; then
+      pkg_manager='apk'
+   else
+      pkg_manager='unknown'
+      error 'Could not detect a known package manager. Aborting.'
+   fi
+
+   echo "$pkg_manager"
+}

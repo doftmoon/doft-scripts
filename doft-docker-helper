@@ -1,0 +1,185 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 doftmoon
+#!/usr/bin/env bash
+set -euo pipefail
+
+DB_PASS="1234Qwerty"
+DB_USER="doft"
+DB_USER_PASS="1313"
+DB_NAME="test"
+
+PG_PORT="5432"
+MYSQL_PORT="3306"
+ORA_PORT="1521"
+MSSQL_PORT=""
+MONGO_PORT=""
+
+info() {
+   echo "INFO: $1"
+}
+
+warn() {
+   echo "WARNING: $1"
+}
+
+error() {
+   echo "ERROR: $1"
+   exit 1
+}
+
+confirm() {
+   if command -v gum &>/dev/null; then
+      gum confirm "$1"
+   else
+      echo -n "$1 (y/n): "; read -r r; [[ "$r" =~ [Yy]$ ]]
+   fi
+}
+
+choose() {
+   if command -v gum &>/dev/null; then
+      gum choose --cursor.foreground 12 --header="Make your choice:" --header.foreground 12 "$@"
+   elif command -v fzf &>/dev/null; then
+      printf "%s\n" "$@" |
+         fzf --prompt='Make your choice: ' \
+            --height=20% \
+            --border --cycle
+   else
+      select opt in "$@"; do [[ -n "$opt" ]] && { echo "$opt"; break; }; done
+   fi
+}
+
+check_deps() {
+   info "Checking for required tools..."
+   if ! command -v docker &>/dev/null; then
+      error "Docker is not installed. Please install it to continue."
+   fi
+
+   if command -v gum &>/dev/null; then
+      echo "Using gum"
+   elif command -v fzf &>/dev/null; then
+      echo "Using fzf"
+   else
+      warn "Neither 'gum' nor 'fzf' is installed. Use one of them for better experience."
+      if confirm "Install gum?"; then
+         install_deps
+      fi
+   fi
+}
+
+install_deps() {
+   local mgrs=(pacman dnf apt)
+   local mgr=$(for m in mgrs; do command -v $m &>/dev/null && { echo ${m%%-*}; break; }; done)
+   info "Package manager: $mgr"
+
+   case $mgr in
+      pacman) sudo pacman -S gum --no-confirm ;;
+      dnf) sudo dnf install -y gum ;;
+      apt) sudo apt install gum ;;
+      *) error "Cannot install gum automatically" ;;
+   esac
+   info 'Dependencies installed'
+}
+
+check_docker_daemon() {
+   if ! docker info &>/dev/null; then
+      sudo systemctl start docker.service
+      info "Docker daemon is starting..."
+      sleep 2
+   fi
+}
+
+# Checks if container already exists and asks what to do: start, recreate, rm
+check_container() {
+   if ! "docker ps | rg $1"; then
+      local readonly options=(start recreate rm)
+      local choice=$(choose "${options[@]}")
+
+      case "$choice" in
+         start) docker start "$1" ;;
+         recreate) docker rm "$1" ;;
+         rm) docker rm "$1" ;;
+         *) error "unknown" ;;
+      esac
+   fi
+}
+
+postgres_container() {
+   info "Starting postgres db container..."
+   local pg_container_name="test-postgres-17"
+   docker run -d \
+      --name "$pg_container_name" \
+      -p "$PG_PORT":"$PG_PORT" \
+      -e POSTGRES_PASSWORD="$DB_PASS" \
+      -e POSTGRES_USER="$DB_USER" \
+      -e POSTGRES_DATABASE="$DB_NAME" \
+      postgres:17.6
+
+   info "The database created!"
+}
+
+mysql_container() {
+   info "Starting mysql db container..."
+   local mysql_container_name="test-mysql-lts"
+   docker run -d \
+      --name "$mysql_container_name" \
+      -p "$MYSQL_PORT:3306" \
+      -e MYSQL_ROOT_PASSWORD="$DB_PASS" \
+      -e MYSQL_USER="$DB_USER" \
+      -e MYSQL_PASSWORD="$DB_USER_PASS" \
+      -e MYSQL_DATABASE="$DB_NAME" \
+      mysql:lts
+}
+
+oracle_container() {
+   info "Starting oracle db container..."
+   local ora_container_name="test-oracle-18c"
+   docker run -d \
+      --name "$ora_container_name" \
+      -p 1521:1521 \
+      -e ORACLE_PASSWORD="$DB_PASS" \
+      -e ORACLE_DATABASE="PDB1" \
+      gvenzl/oracle-free:latest
+
+   info "The database created!"
+}
+
+mssql_container() {
+   info "Not supported for now"
+   local mssql_container_name="test-mssqlserver-2022"
+   docker run -d \
+      --name "$mssql_container_name" \
+      -p "$MSSQL_PORT":"$MSSQL_PORT" \
+
+}
+
+mongodb_container() {
+   info "Not supported for now"
+   local mongodb_container_name="test-mongodb"
+   docker run -d \
+      --name "$mongodb_container_name" \
+      -p "$MONGO_PORT"
+}
+
+pick_db() {
+   local options=(postgres mysql oracle mssql mongodb)
+   local choice=$(choose "${options[@]}")
+
+   case "$choice" in
+      postgres) postgres_container ;;
+      mysql) mysql_container ;;
+      oracle) oracle_container ;;
+      mssql) mssql_container ;;
+      mongodb) mongodb_container ;;
+      *) error "No such container template exists." ;;
+   esac
+}
+
+main() {
+   [[ $EUID -eq 0 ]] && { error "Don't run as root!"; }
+
+   check_deps
+   check_docker_daemon
+   pick_db
+}
+
+main
