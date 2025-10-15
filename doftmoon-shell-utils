@@ -8,11 +8,27 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 info() {
-   echo -e "${SAKURA}INFO: $1${NC}"
+   if command -v gum &>/dev/null; then
+      gum style --foreground 10 "$1"
+   else
+      echo -e "${SAKURA}INFO:${NC} $1"
+   fi
+}
+
+warn() {
+   if command -v gum &>/dev/null; then
+      gum style --foreground 11 "$1"
+   else
+      echo -e "\e[33mWARNING:${NC} $1"
+   fi
 }
 
 error() {
-   echo -e "${RED}ERROR:${NC} $1" >&2
+   if command -v gum &>/dev/null; then
+      gum style --foreground 9 "$1" >&2
+   else
+      echo -e "${RED}ERROR:${NC} $1" >&2
+   fi
    exit 1
 }
 
@@ -25,11 +41,13 @@ confirm() {
 }
 
 choose() {
+   local prompt="$1"
+   shift
    if command -v gum &>/dev/null; then
-      gum choose --cursor.foreground 12 --header="Make your choice:" --header.foreground 12 "$@"
+      gum choose --cursor.foreground 12 --header="$prompt" --header.foreground 12 "$@"
    elif command -v fzf &>/dev/null; then
       printf "%s\n" "$@" |
-         fzf --prompt='Make your choice: ' \
+         fzf --prompt='$prompt' \
             --height=20% \
             --border --cycle
    else

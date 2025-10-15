@@ -6,7 +6,7 @@ set -euo pipefail
 DB_PASS="1313"
 DB_USER="testuser"
 DB_USER_PASS="1313"
-DB_NAME="test"
+DB_NAME="testdb"
 
 # prefix is used to ensure no other container matches the test containers
 readonly PREFIX="test"
@@ -17,7 +17,7 @@ readonly PG_PORT="5432"
 readonly MYSQL_PORT="3306"
 readonly ORA_PORT="1521"
 readonly MSSQL_PORT="1433"
-readonly MONGO_PORT="8081"
+readonly MONGODB_PORT="8081"
 
 info() {
    if command -v gum &>/dev/null; then
@@ -68,14 +68,29 @@ choose() {
 }
 
 install_deps() {
-   local mgrs=(pacman dnf apt)
-   local mgr=$(for m in mgrs; do command -v $m &>/dev/null && { echo ${m%%-*}; break; }; done)
+   local mgrs=(pacman dnf zypper apt)
+   local mgr=$(for m in $mgrs; do command -v $m &>/dev/null && { echo ${m%%-*}; break; }; done)
    info "Package manager: $mgr"
 
    case $mgr in
-      pacman) sudo pacman -S gum --no-confirm ;;
+      pacman) sudo pacman -S gum --needed --noconfirm ;;
       dnf) sudo dnf install -y gum ;;
-      apt) sudo apt install -y gum ;;
+      zypper) sudo zypper install -y gum ;;
+      # refrence https://github.com/basecamp/omakub/issues/222
+      apt)
+         warn "In order to install gum and lots of other modern terminal tools"
+         warn "The Charm repository needs to be added for apt in order to get package"
+         warn "this repo and Charm company is a well-known source of high-quality tools"
+         if confirm "Do you want to add Charm repository for apt?"; then
+            info "Adding Charm repository for apt..."
+            sudo mkdir -p /etc/apt/keyrings
+            curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+            echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
+            sudo apt update && sudo apt install gum
+         else
+            error "Canceled operation"
+         fi
+         ;;
       *) error "Cannot install gum automatically" ;;
    esac
    info 'Dependencies installed'
@@ -107,10 +122,21 @@ check_docker_daemon() {
    fi
 }
 
+print_conninfo() {
+   local container_name="$1"
+   local container_port="$2"
+   echo ""
+   info "Container $container_name started."
+   info "Container port: $container_port"
+   info "DB user: $DB_USER"
+   info "DB pass: $DB_PASS"
+}
+
 run_postgres() {
-   info "Starting postgres db container..."
    local pg_container_name="$1"
    local pg_image_tag="$2"
+   info "Starting postgres db container..."
+
    docker run -d \
       --name "$pg_container_name" \
       -p "$PG_PORT:5432" \
@@ -119,13 +145,13 @@ run_postgres() {
       -e POSTGRES_DATABASE="$DB_NAME" \
       postgres:"$pg_image_tag"
 
-   info "The database created!"
+   print_conninfo "$pg_container_name" "$PG_PORT"
 }
 
 run_mysql() {
-   info "Starting mysql db container..."
    local mysql_container_name="$1"
    local mysql_image_tag="$2"
+   info "Starting mysql db container..."
    docker run -d \
       --name "$mysql_container_name" \
       -p "$MYSQL_PORT:3306" \
@@ -133,44 +159,51 @@ run_mysql() {
       -e MYSQL_USER="$DB_USER" \
       -e MYSQL_PASSWORD="$DB_USER_PASS" \
       -e MYSQL_DATABASE="$DB_NAME" \
-      mysql:lts
+      mysql:"$mysql_image_tag"
+
+   print_conninfo "$mysql_container_name" "$MYSQL_PORT"
 }
 
 run_oracle() {
-   info "Starting oracle db container..."
-   local ora_container_name="test-oracle-18c"
+   local ora_container_name="$1"
+   local ora_image_tag="$2"
+   info "Starting mysql db container..."
    docker run -d \
       --name "$ora_container_name" \
-      -p 1521:1521 \
+      -p "$ORA_PORT:1521" \
       -e ORACLE_PASSWORD="$DB_PASS" \
       -e ORACLE_DATABASE="PDB1" \
-      gvenzl/oracle-free:latest
+      gvenzl/oracle-free:"$ora_image_tag"
 
-   info "The database created"
+   print_conninfo "$ora_container_name" "$ORA_PORT"
 }
 
 run_mssql() {
    local mssql_container_name="$1"
-   local tag=
+   local mssql_image_tag="$2"
+   info "Starting mssql db container..."
    docker run -d \
       --name "$mssql_container_name" \
-      -p "$MSSQL_PORT":"$MSSQL_PORT" \
+      -p "$MSSQL_PORT:1433" \
       -e ACCEPT_EULA="Y" \
       -e MSSQL_SA_PASSWORD="$DB_PASS" \
-      mcr.microsoft.com/mssql/server:"$tag"
+      mcr.microsoft.com/mssql/server:"$mssql_image_tag"
 
-   info "Sql Server created"
+   print_conninfo "$mssql_container_name" "$MSSQL_PORT"
 }
 
 run_mongodb() {
-   info "Not supported for now"
-   local mongodb_container_name="test-mongodb"
+   local mongodb_container_name="$1"
+   local mongodb_image_tag="$2"
+   info "Starting mongodb container..."
    docker run -d \
       --name "$mongodb_container_name" \
-      -p "$MONGODB_PORT:$MONGODB_PORT"
-      mongo:8.0.15
+      -p "$MONGODB_PORT:8081" \
+      -e MONGO_INITDB_ROOT_USERNAME="$DB_USER" \
+      -e MONGO_INITDB_ROOT_PASSWORD="$DB_PASS" \
+      mongo:"$mongodb_image_tag"
 
-   info "MongoDB created"
+   print_conninfo "$mongodb_container_name" "$MONGODB_PORT"
 }
 
 container_manager() {
@@ -179,18 +212,21 @@ container_manager() {
    local tag="$3"
 
    case "$action" in
-      continue) exit 0 ;;
+      continue) info "Container $container_name will be created" ;;
       recreate) docker rm -f "$container_name" ;;
-      rm) docker rm "$container_name"; exit 0 ;;
+      rm) docker rm -f "$container_name"; exit 0 ;;
       start) docker start "$container_name"; exit 0 ;;
       stop) docker stop "$container_name"; exit 0 ;;
-      exit) exit 0 ;;
-      *) error "unknown action" ;;
+      cancel) exit 0 ;;
+      *) error "Unknown action" ;;
    esac
 
    case "$container_name" in
       "$PREFIX-postgres-$tag") run_postgres "$container_name" "$tag" ;;
+      "$PREFIX-mysql-$tag") run_mysql "$container_name" "$tag" ;;
       "$PREFIX-oracle-$tag") run_oracle "$container_name" "$tag" ;;
+      "$PREFIX-mssql-$tag") run_mssql "$container_name" "$tag" ;;
+      "$PREFIX-mongodb-$tag") run_mongodb "$container_name" "$tag" ;;
       *) error "No such container" ;;
    esac
 }
@@ -201,32 +237,22 @@ check_container() {
    local action="continue"
 
    if docker ps -a --format '{{.Names}}' | grep -q "^$container_name"; then
-      info "Container $container_name already exists!"
       local state=$(docker inspect --format '{{.State.Status}}' "$container_name")
 
       if [[ "$state" == "running" ]]; then
          local options=(recreate rm stop cancel)
-         action=$(choose "What would you like to do?" "${options[@]}")
+         action=$(choose "Container $container_name already running. Choose action:" "${options[@]}")
       else
          local options=(recreate rm start cancel)
-         action=$(choose "What would you like to do?" "${options[@]}")
+         action=$(choose "Container $container_name already exists. Choose action:" "${options[@]}")
       fi
    fi
+
    echo "$action"
 }
 
-print_conninfo() {
-echo ""
-}
-
-main() {
-   [[ $EUID -eq 0 ]] && { error "Don't run as root!"; }
-
-   check_deps
-   check_docker_daemon
-
-   local options=(postgres mysql oracle mssql mongodb exit)
-   local db=$(choose "Select a database:" "${options[@]}")
+select_db_ver() {
+   local db="$1"
    local tag
 
    case "$db" in
@@ -243,11 +269,46 @@ main() {
       *) error "No such database choice" ;;
    esac
 
+   echo "$tag"
+}
+
+select_db() {
+   local options=($@)
+   local db=$(choose "Select a database:" "${options[@]}")
+
+   echo "$db"
+}
+
+main() {
+   [[ $EUID -eq 0 ]] && { error "Don't run as root!"; }
+
+   check_deps
+   check_docker_daemon
+
+   # menu to pick database
+   local db_options=(postgres mysql oracle mssql mongodb exit)
+   local db=$(select_db "${db_options[@]}")
+   if [[ "$db" == "" ]]; then
+      error "Selection canceled"
+   fi
+
+   # menu to pick prev selected database version if such provided
+   local tag=$(select_db_ver "$db")
+   if [[ "$tag" == "" ]]; then
+      error "Selection canceled"
+   fi
+
+   # checks if container already exists and gives menu with options
    local container_name="$PREFIX-$db-$tag"
    local action=$(check_container "$container_name")
+   if [[ "$action" == "" ]]; then
+      error "Selection canseled"
+   fi
+
+   # takes imput collected from user throughtout script and does what was requested
    container_manager "$action" "$container_name" "$tag"
 
    info "Setup finished successfully :3"
 }
 
-main
+main "$@"
