@@ -111,7 +111,7 @@ check_deps() {
 
 check_docker_daemon() {
    if ! docker info &>/dev/null; then
-      info "Docker daemon in not started on the standard socket"
+      warn "Docker daemon in not started on the standard socket"
       if confirm "Start docker?"; then
          sudo systemctl start docker.service
          info "Docker daemon is starting..."
@@ -173,7 +173,7 @@ run_oracle() {
       -p "$ORA_PORT:1521" \
       -e ORACLE_PASSWORD="$DB_PASS" \
       -e ORACLE_DATABASE="PDB1" \
-      gvenzl/oracle-free:"$ora_image_tag"
+      gvenzl/oracle-xe:"$ora_image_tag"
 
    print_conninfo "$ora_container_name" "$ORA_PORT"
 }
@@ -262,7 +262,11 @@ select_db_ver() {
          tag="$ver"
          ;;
       mysql) tag="lts" ;;
-      oracle) tag="18c" ;;
+      oracle)
+         local ver_list=(21 18-full)
+         local ver=$(choose "Select Oracle version:" "${ver_list[@]}")
+         tag="$ver"
+         ;;
       mssql) tag="2022-latest" ;;
       mongodb) tag="8.0.15" ;;
       exit) info "Exiting"; exit 0 ;;
@@ -288,7 +292,7 @@ main() {
    # menu to pick database
    local db_options=(postgres mysql oracle mssql mongodb exit)
    local db=$(select_db "${db_options[@]}")
-   if [[ "$db" == "" ]]; then
+   if [[ "$db" == "" || "$db" == "exit" ]]; then
       error "Selection canceled"
    fi
 
