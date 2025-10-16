@@ -8,28 +8,37 @@ set -euo pipefail
 
 readonly LOCAL_PATH="$HOME/.local/bin"
 readonly GLOBAL_PATH='/usr/local/bin'
-readonly SCRIPT_DIR=$(pwd)
+readonly CURRENT_DIR=$(pwd)
+readonly SCRIPT_DIR="$CURRENT_DIR"
 readonly SCRIPT_NAME=$(basename "${BASH_SOURCE[0]}")
 
 info() {
-   echo $1
+   if command -v gum &>/dev/null; then
+      gum style --foreground 10 "$1"
+   else
+      echo -e "\e[32mINFO:\e[0m $1"
+   fi
 }
 
 error() {
-   echo $1
+   if command -v gum &>/dev/null; then
+      gum style --foreground 9 "$1" >&2
+   else
+      echo -e "\e[31mERROR:\e[0m $1" >&2
+   fi
    exit 1
 }
 
-ensure_not_root() {
-   [[ $EUID -eq 0 ]] && { error "Don't run as root"; exit 1; }
-   echo ""
-}
-
-choose_dest() {
+choose() {
+   local prompt="$1"
+   shift
    if command -v gum &>/dev/null; then
-      gum choose --cursor.foreground 12 --header="" --header.foreground 12 "$@"
+      gum choose --cursor.foreground 12 --header="$prompt" --header.foreground 12 "$@"
    elif command -v fzf &>/dev/null; then
-      echo "fzf"
+      printf "%s\n" "$@" |
+         fzf --prompt='$prompt' \
+            --height=20% \
+            --border --cycle
    else
       select opt in "$@"; do [[ -n "$opt" ]] && { echo "$opt"; break; }; done
    fi
@@ -55,21 +64,29 @@ linker() {
    info "Scripts succesfully linked with: $dest_path"
 }
 
-link_scripts() {
-   if [[ $1 == "local" ]]; then
+main() {
+   [[ $EUID -eq 0 ]] && { error "Don't run as root"; exit 1; }
+
+   local choice=""
+
+   if [[ "$#" -gt 0 ]]; then
+      choice="$1"
+   fi
+
+   if [[ "$choice" == "" ]]; then
+      echo "Make a choice"
+      local choices=(local global)
+      choice=$(choose "Choose where to link scripts" "${choices[@]}")
+   fi
+
+   if [[ "$choice" == "local" ]]; then
+      mkdir -p "$LOCAL_PATH"
       linker "$LOCAL_PATH"
-   elif [[ $1 == "global" ]]; then
-      info "Global chosen. Nothing done."
+   elif [[ "$choice" == "global" ]]; then
+      linker "$GLOBAL_PATH"
+   else
+      error "Unknown or unsupported choice. Aborting."
    fi
 }
 
-main() {
-   ensure_not_root
-
-   echo "Make a choice"
-   local choices=(local global)
-   local choice=$(choose_dest "${choices[@]}")
-   link_scripts "$choice"
-}
-
-main
+main "$@"
