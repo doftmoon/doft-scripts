@@ -32,6 +32,14 @@ error() {
    exit 1
 }
 
+spiner() {
+   if command -v gum &>/dev/null; then
+      gum spiner "$@"
+   else
+      echo -e "$@"
+   fi
+}
+
 confirm() {
    if command -v gum &>/dev/null; then
       gum confirm "$1"
