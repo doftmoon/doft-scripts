@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 doftmoon
+#
+# apparently linux has no command to make a timer with notification
 set -euo pipefail
 
 if [ -z "$1" ]; then

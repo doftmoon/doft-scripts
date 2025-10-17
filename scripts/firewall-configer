@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 doftmoon
 # put in ~/.local/bin/firewall-configer
+#
+# currently work-in-progress, as I moved from ufw to firewalld for more robust
+# workflow and better work with docker and vms
 set -euo pipefail
 source doftmoon-shell-utils
 

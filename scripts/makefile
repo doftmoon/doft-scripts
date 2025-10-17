@@ -1,6 +1,9 @@
 #!/bin/bash
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 doftmoon
+#
+# Small script to generate automakefile so all the cpp files could be compiled
+# with ease. Haven't used in a long time and not sure if its working well
 
 target_dir="."
 #param -r to del /build and Makefile

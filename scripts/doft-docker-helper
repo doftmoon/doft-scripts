@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 doftmoon
+#
+# script is used to speedup local database development or testing in docker
+# most of the errors are thought about, later updates will make UI look and
+# feel better and also monitoring tools will be selectable if needed for testing
 set -euo pipefail
 
 DB_PASS="1234"

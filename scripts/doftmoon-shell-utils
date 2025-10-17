@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 doftmoon
 # put in ~/.local/lib/doftmoon-shell-utils
+#
+# set of my template commands that I use and like to include in my small scripts
+# as it makes it easier to write scripts and follow DRY
 
 SAKURA='\033[38;2;219;184;213m'
 RED='\033[0;31m'
