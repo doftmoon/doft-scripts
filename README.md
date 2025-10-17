@@ -10,8 +10,8 @@ one for them.
 ## doft-docker-helper
 
 This script was created to improve workflows when some diff local databases are
-needed for some testings or whatever. It makes fast to create a new database with
-supported versions.
+needed for some testings or whatever. It makes them fast to create, recreate,
+destroy and manage.
 
 It's also pretty smart about deps and cases when such container already exists.
 Which comes handy in case test db needs to be recreated fast.
@@ -19,7 +19,7 @@ Which comes handy in case test db needs to be recreated fast.
 **Supported databases:**
 * Postgres (Multiple versions)
 * MySQL (8.4-lts)
-* Oracle Database (18c)
+* Oracle Database (21c, 18c-full)
 * MSSQL Server (2022-latest)
 * MongoDB (8.0.15)
 
