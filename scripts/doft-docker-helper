@@ -3,9 +3,9 @@
 # Copyright (c) 2025 doftmoon
 set -euo pipefail
 
-DB_PASS="1313"
-DB_USER="testuser"
-DB_USER_PASS="1313"
+DB_PASS="1234"
+DB_USER="test"
+DB_USER_PASS="1234"
 DB_NAME="testdb"
 
 # prefix is used to ensure no other container matches the test containers
@@ -126,11 +126,15 @@ check_docker_daemon() {
 print_conninfo() {
    local container_name="$1"
    local container_port="$2"
+   local container_db_pass="$3"
+   local container_db_user="$4"
+   local container_db_name="$5"
    echo ""
    info "Container $container_name started."
    info "Container port: $container_port"
-   info "DB user: $DB_USER"
-   info "DB pass: $DB_PASS"
+   info "DB user: $container_db_user"
+   info "DB pass: $container_db_pass"
+   info "DB name: $container_db_name"
 }
 
 run_postgres() {
@@ -146,9 +150,10 @@ run_postgres() {
       -e POSTGRES_DATABASE="$DB_NAME" \
       postgres:"$pg_image_tag"
 
-   print_conninfo "$pg_container_name" "$PG_PORT"
+   print_conninfo "$pg_container_name" "$PG_PORT" "$DB_PASS" "$DB_USER" "$DB_NAME"
 }
 
+# if errors with DBeaver reference https://github.com/orgs/dbeaver/discussions/19670
 run_mysql() {
    local mysql_container_name="$1"
    local mysql_image_tag="$2"
@@ -157,12 +162,12 @@ run_mysql() {
       --name "$mysql_container_name" \
       -p "$MYSQL_PORT:3306" \
       -e MYSQL_ROOT_PASSWORD="$DB_PASS" \
+      -e MYSQL_DATABASE="$DB_NAME" \
       -e MYSQL_USER="$DB_USER" \
       -e MYSQL_PASSWORD="$DB_USER_PASS" \
-      -e MYSQL_DATABASE="$DB_NAME" \
       mysql:"$mysql_image_tag"
 
-   print_conninfo "$mysql_container_name" "$MYSQL_PORT"
+   print_conninfo "$mysql_container_name" "$MYSQL_PORT" "$DB_PASS" "$DB_USER" "$DB_NAME"
 }
 
 run_oracle() {
@@ -173,24 +178,27 @@ run_oracle() {
       --name "$ora_container_name" \
       -p "$ORA_PORT:1521" \
       -e ORACLE_PASSWORD="$DB_PASS" \
-      -e ORACLE_DATABASE="PDB1" \
+      -e APP_USER="$DB_USER" \
+      -e APP_USER_PASSWORD="$DB_USER_PASS" \
+      -e ORACLE_DATABASE="$DB_NAME" \
       gvenzl/oracle-xe:"$ora_image_tag"
 
-   print_conninfo "$ora_container_name" "$ORA_PORT"
+   print_conninfo "$ora_container_name" "$ORA_PORT" "$DB_PASS" "$DB_USER" "$DB_NAME"
 }
 
 run_mssql() {
    local mssql_container_name="$1"
    local mssql_image_tag="$2"
+   local mssql_db_pass="1234Qwerty?"
    info "Starting mssql db container..."
    docker run -d \
       --name "$mssql_container_name" \
       -p "$MSSQL_PORT:1433" \
       -e ACCEPT_EULA="Y" \
-      -e MSSQL_SA_PASSWORD="$DB_PASS" \
+      -e MSSQL_SA_PASSWORD="$mssql_db_pass" \
       mcr.microsoft.com/mssql/server:"$mssql_image_tag"
 
-   print_conninfo "$mssql_container_name" "$MSSQL_PORT"
+   print_conninfo "$mssql_container_name" "$MSSQL_PORT" "$mssql_db_pass" "sa" "master"
 }
 
 run_mongodb() {
@@ -204,7 +212,7 @@ run_mongodb() {
       -e MONGO_INITDB_ROOT_PASSWORD="$DB_PASS" \
       mongo:"$mongodb_image_tag"
 
-   print_conninfo "$mongodb_container_name" "$MONGODB_PORT"
+   print_conninfo "$mongodb_container_name" "$MONGODB_PORT" "$DB_PASS" "$DB_NAME"
 }
 
 container_manager() {
