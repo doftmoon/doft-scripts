@@ -210,9 +210,10 @@ run_mongodb() {
       -p "$MONGODB_PORT:8081" \
       -e MONGO_INITDB_ROOT_USERNAME="$DB_USER" \
       -e MONGO_INITDB_ROOT_PASSWORD="$DB_PASS" \
+      -e MONGO_INITDB_DATABASE="$DB_NAME" \
       mongo:"$mongodb_image_tag"
 
-   print_conninfo "$mongodb_container_name" "$MONGODB_PORT" "$DB_PASS" "$DB_NAME"
+   print_conninfo "$mongodb_container_name" "$MONGODB_PORT" "$DB_PASS" "$DB_USER" "$DB_NAME"
 }
 
 container_manager() {
