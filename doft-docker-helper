@@ -69,7 +69,7 @@ choose() {
 
 install_deps() {
    local mgrs=(pacman dnf zypper apt)
-   local mgr=$(for m in $mgrs; do command -v $m &>/dev/null && { echo ${m%%-*}; break; }; done)
+   local mgr=$(for m in ${mgrs[@]}; do command -v $m &>/dev/null && { echo ${m%%-*}; break; }; done)
    info "Package manager: $mgr"
 
    case $mgr in
