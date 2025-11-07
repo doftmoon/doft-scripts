@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 doftmoon
+set -euo pipefail
+source doftmoon-shell-utils
+
+readonly THEMES_DIR="$HOME/.config/ataraxia/theme"
+readonly WALLPAPERS_DIR="$HOME/.config/ataraxia/wallpaper"
+readonly CURRENT_WALLPAPER_PATH="$HOME/.config/ataraxia/current/wallpaper.jpg"
+readonly CURRENT_THEME_DIR="$HOME/.config/ataraxia/current/theme"
+readonly CURRENT_THEME_REAL_PATH=$(realpath "$CURRENT_THEME_DIR")
+
+restart_app() {
+   local app="$1"
+
+   pkill -x "$app"
+   setsid "$app" >/dev/null 2>&1 &
+}
+
+update_links() {
+   local theme_path="$1"
+   ln -snf "$theme_path" "$CURRENT_THEME_DIR"
+}
+
+change_bg() {
+   local theme_name=$(basename "$1")
+   local wallpaper_path
+   case "$theme_name" in
+      ataraxia-dark) wallpaper_path="$WALLPAPERS_DIR/cybersigilism.jpg" ;;
+      ataraxia-red) wallpaper_path="$WALLPAPERS_DIR/driving.jpg" ;;
+      *) wallpaper_path="$WALLPAPERS_DIR/driving.jpg" ;;
+   esac
+
+   ln -sf "$wallpaper_path" "$CURRENT_WALLPAPER_PATH"
+   hyprctl hyprpaper unload "$CURRENT_WALLPAPER_PATH" -q
+   hyprctl hyprpaper preload "$CURRENT_WALLPAPER_PATH" -q
+   hyprctl hyprpaper wallpaper ",$CURRENT_WALLPAPER_PATH" -q
+}
+
+get_theme_paths() {
+   local paths=()
+   readarray -t paths < <(fd . "$THEMES_DIR" -d 1 -t d -t l | sort)
+   printf "%s\n" "${paths[@]}"
+}
+
+main() {
+   [[ $EUID -eq 0 ]] && { error "Don't run as root!"; }
+
+   declare -gA themes
+   local theme_pathes=()
+   readarray -t theme_pathes < <(get_theme_paths)
+
+   for path in "${theme_pathes[@]}"; do
+      local basename
+      basename=$(basename "$path")
+
+      local name
+      name=$(echo "$basename" | sed -E 's/(^|-)([a-z])/\1\u\2/g; s/-/ /g')
+
+      themes["$name"]="$path"
+   done
+
+   local theme_names=()
+   readarray -t theme_names < <(printf "%s\n" "${!themes[@]}" | sort)
+
+   local choice=$(choose 'Pick a theme' "${theme_names[@]}" 'Cancel')
+   if [[ -z "$choice" || "$choice" == "Cancel" ]]; then
+      exit 0
+   fi
+
+   local chosen_path="${themes["$choice"]}"
+   if [[ -z "$chosen_path" ]]; then
+      exit 1
+   fi
+
+   if [[ "$chosen_path" != "$CURRENT_THEME_REAL_PATH/" ]]; then
+      change_bg "$chosen_path"
+      update_links "$chosen_path"
+      hyprctl reload -q
+      pkill -SIGUSR2 waybar
+      pkill -SIGUSR2 ghostty
+   else
+      info "This theme already applied :3"
+   fi
+}
+
+main
