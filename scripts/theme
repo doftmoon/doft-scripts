@@ -4,11 +4,11 @@
 set -euo pipefail
 source doftmoon-shell-utils
 
-readonly THEMES_DIR="$HOME/.config/ataraxia/theme"
-readonly WALLPAPERS_DIR="$HOME/.config/ataraxia/wallpaper"
-readonly CURRENT_WALLPAPER_PATH="$HOME/.config/ataraxia/current/wallpaper.jpg"
-readonly CURRENT_THEME_DIR="$HOME/.config/ataraxia/current/theme"
-readonly CURRENT_THEME_REAL_PATH=$(realpath "$CURRENT_THEME_DIR")
+THEMES_DIR="$HOME/.config/ataraxia/theme"
+WALLPAPERS_DIR="$HOME/.config/ataraxia/wallpaper"
+CURRENT_WALLPAPER_PATH="$HOME/.config/ataraxia/current/wallpaper.jpg"
+CURRENT_THEME_DIR="$HOME/.config/ataraxia/current/theme"
+CURRENT_THEME_REAL_PATH=$(realpath "$CURRENT_THEME_DIR")
 
 restart_app() {
    local app="$1"
@@ -28,6 +28,8 @@ change_bg() {
    case "$theme_name" in
       ataraxia-dark) wallpaper_path="$WALLPAPERS_DIR/cybersigilism.jpg" ;;
       ataraxia-red) wallpaper_path="$WALLPAPERS_DIR/driving.jpg" ;;
+      arch-lore-accurate) wallpaper_path="$WALLPAPERS_DIR/driving.jpg" ;;
+      doftmoon) wallpaper_path="$WALLPAPERS_DIR/driving.jpg" ;;
       *) wallpaper_path="$WALLPAPERS_DIR/driving.jpg" ;;
    esac
 
@@ -64,7 +66,7 @@ main() {
    readarray -t theme_names < <(printf "%s\n" "${!themes[@]}" | sort)
 
    local choice=$(choose 'Pick a theme' "${theme_names[@]}" 'Cancel')
-   if [[ -z "$choice" || "$choice" == "Cancel" ]]; then
+   if [[ -z "$choice" || "$choice" == 'Cancel' ]]; then
       exit 0
    fi
 
@@ -80,7 +82,7 @@ main() {
       pkill -SIGUSR2 waybar
       pkill -SIGUSR2 ghostty
    else
-      info "This theme already applied :3"
+      info 'This theme already applied :3'
    fi
 }
 

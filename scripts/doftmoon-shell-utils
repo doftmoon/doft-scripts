@@ -74,6 +74,7 @@ ensure_not_root() {
 
 detect_package_manager() {
    local pkg_manager=''
+   local mgrs=(pacman zypper dnf apt)
 
    if command -v apt-get &>/dev/null; then
       pkg_manager='apt'

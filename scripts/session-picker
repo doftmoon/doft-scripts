@@ -18,7 +18,6 @@ home_profile() {
 
    hyprctl dispatch exec "[workspace 1 silent]" "$TERMINAL"
    hyprctl dispatch exec "[workspace 2 silent]" "$BROWSER"
-   hyprctl dispatch exec "[workspace 4 silent]" "$AUDIO"
 }
 
 work_profile() {

@@ -7,21 +7,22 @@
 # feel better and also monitoring tools will be selectable if needed for testing
 set -euo pipefail
 
-DB_PASS="1234"
-DB_USER="test"
-DB_USER_PASS="1234"
-DB_NAME="testdb"
+DB_PASS='1234'
+DB_USER='test'
+DB_USER_PASS='1234'
+DB_SQL_SERVER_PASS='1234Qwerty?'
+DB_NAME='testdb'
 
 # prefix is used to ensure no other container matches the test containers
-readonly PREFIX="test"
+PREFIX='test'
 
 # what os port is db port forwarded to
 # in case the host os already runs db instance on standard port change it
-readonly PG_PORT="5432"
-readonly MYSQL_PORT="3306"
-readonly ORA_PORT="1521"
-readonly MSSQL_PORT="1433"
-readonly MONGODB_PORT="8081"
+PG_PORT='5432'
+MYSQL_PORT='3306'
+ORA_PORT='1521'
+MSSQL_PORT='1433'
+MONGODB_PORT='8081'
 
 info() {
    if command -v gum &>/dev/null; then
@@ -83,8 +84,7 @@ install_deps() {
       # refrence https://github.com/basecamp/omakub/issues/222
       apt)
          warn "In order to install gum and lots of other modern terminal tools"
-         warn "The Charm repository needs to be added for apt in order to get package"
-         warn "this repo and Charm company is a well-known source of high-quality tools"
+         warn "The Charm repository needs to be added for apt to get packages"
          if confirm "Do you want to add Charm repository for apt?"; then
             info "Adding Charm repository for apt..."
             sudo mkdir -p /etc/apt/keyrings
@@ -193,7 +193,7 @@ run_oracle() {
 run_mssql() {
    local mssql_container_name="$1"
    local mssql_image_tag="$2"
-   local mssql_db_pass="1234Qwerty?"
+   local mssql_db_pass="$DB_SQL_SERVER_PASS"
    info "Starting mssql db container..."
    docker run -d \
       --name "$mssql_container_name" \
@@ -227,10 +227,10 @@ container_manager() {
 
    case "$action" in
       continue) info "Container $container_name will be created" ;;
-      recreate) docker rm -f "$container_name" ;;
-      rm) docker rm -f "$container_name"; exit 0 ;;
       start) docker start "$container_name"; exit 0 ;;
       stop) docker stop "$container_name"; exit 0 ;;
+      recreate) docker rm -f "$container_name" ;;
+      rm) docker rm -f "$container_name"; exit 0 ;;
       cancel) exit 0 ;;
       *) error "Unknown action" ;;
    esac
@@ -254,10 +254,10 @@ check_container() {
       local state=$(docker inspect --format '{{.State.Status}}' "$container_name")
 
       if [[ "$state" == "running" ]]; then
-         local options=(recreate rm stop cancel)
+         local options=(stop recreate rm cancel)
          action=$(choose "Container $container_name already running. Choose action:" "${options[@]}")
       else
-         local options=(recreate rm start cancel)
+         local options=(start recreate rm cancel)
          action=$(choose "Container $container_name already exists. Choose action:" "${options[@]}")
       fi
    fi
