@@ -55,13 +55,16 @@ create_or_attach_session() {
 
 switch_active_session() {
    local session_name
+   local exclude_pattern
 
    if [[ -v TMUX ]]; then
       local current_session
       current_session=$(tmux display-message -p '#S')
-      session_name=$(tmux list-sessions -F '#S' 2>/dev/null | grep -v "^${current_session}$" | fzf --reverse --prompt='Switch Session: ')
+      exclude_pattern="^(q1|q2|q3|$current_session)$"
+      session_name=$(tmux list-sessions -F '#S' 2>/dev/null | grep -vE "$exclude_pattern" | fzf --reverse --prompt='Switch Session: ')
    else
-      session_name=$(tmux list-sessions -F '#S' 2>/dev/null | fzf --reverse --prompt='Attach Session: ')
+      exclude_pattern='^(q1|q2|q3)$'
+      session_name=$(tmux list-sessions -F '#S' 2>/dev/null | grep -vE "$exclude_pattern" | fzf --reverse --prompt='Attach Session: ')
    fi
 
    [[ -z "$session_name" ]] && exit 0
@@ -71,15 +74,15 @@ switch_active_session() {
 
 find_project() {
    local target_dir
-   target_dir=$(find ~/personal ~/uni ~/work \
+   target_dir=$(cd "$HOME" && find personal work \
       -mindepth 1 \
       -maxdepth 1 \
       -type d 2>/dev/null |
-      fzf --preview 'ls -tp {} --color=always')
+      fzf --reverse --prompt='Project Finder: ' --preview 'cd $HOME && ls -tp {} --color=always')
 
    [[ -z "$target_dir" ]] && exit 0
 
-   target_dir="${target_dir%/}"
+   target_dir="$HOME/${target_dir%/}"
    local session_name="${target_dir##*/}"
    session_name="${session_name//[ .:]/_}"
 
