@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Copyright (c) 2026 doftmoon
+# SPDX-License-Identifier: MIT
+
+(( $# == 0 )) && { printf "usage: bash-profiler <command> [args...]\n"; exit 1; }
+
+TARGET_CMD="$1"
+shift
+TARGET_PATH=$(command -v "$TARGET_CMD")
+
+[[ -z "$TARGET_PATH" ]] &&
+   { printf "Error: '%s' not found in PATH or is not executable.\n" "$TARGET_CMD" >&2;
+   exit 1; }
+
+LOG_FILE="/tmp/${TARGET_CMD##*/}-profile-${EPOCHSECONDS}.log"
+
+printf "\033[32mINFO:\033[0m Profiling '%s %s'...\n" "$TARGET_CMD" "$*"
+
+# open the file descriptor and export the tracing environment
+exec 67> "$LOG_FILE"
+export BASH_XTRACEFD="67"
+export PS4='+ ${EPOCHREALTIME} [Line: ${LINENO}] '
+bash -x "$TARGET_PATH" "$@"
+# clean up the file descriptor
+exec 67>&-
+
+mapfile -t trace_lines < "$LOG_FILE"
+
+if (( ${#trace_lines[@]} < 60 )); then
+   printf '\n\033[32mINFO:\033[0m Trace output:\n'
+   printf '%s\n' "${trace_lines[@]}"
+else
+   printf "\033[32mINFO:\033[0m Profiling complete. Read it with:\n"
+   printf "cat %s\n" "$LOG_FILE"
+fi

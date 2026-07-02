@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Copyright (c) 2026 doftmoon
+# SPDX-License-Identifier: MIT
+#
+# script to help you dump your project to agent
+
+TARGET_DIR="${1:-.}"
+
+TREE_IGNORE=".git|.env|.cache|*.bak|.ansible|.vagrant|.venv|__pycache__|node_modules|artifacts|.ruff_cache"
+
+get_files() {
+   if command -v fd &>/dev/null; then
+      fd --type f --hidden \
+         -E ".git" -E ".obsidian" -E "node_modules" -E ".venv" -E ".cache" -E "__pycache__" \
+         -E "artifacts" -E ".ruff_cache" -E ".env" -E ".DS_Store" -E "*.swp" -E "*.bak" \
+         . "$TARGET_DIR"
+   else
+      local prune=( -type d \( -name ".git" \
+         -o -name ".obsidian" \
+         -o -name ".cache" \
+         -o -name ".ansible" \
+         -o -name ".vagrant" \
+         -o -name ".venv" \
+         -o -name "__pycache__" \
+         -o -name "node_modules" \
+         -o -name "artifacts" \
+         -o -name ".ruff_cache" \) -prune -o)
+      local files=( -type f ! -name ".env" \
+         ! -name "*.bak" \
+         ! -name ".DS_Store" -print )
+      find "$TARGET_DIR" "${prune[@]}" "${files[@]}"
+   fi
+}
+
+generate_context() {
+    echo "### Directory Tree"
+    if command -v tree &>/dev/null; then
+        tree -a -I "$TREE_IGNORE" --noreport "$TARGET_DIR"
+    else
+        get_files | sort | sed -e 's/[^-][^\/]*\// |/g' -e 's/|\([^ ]\)/|-\1/'
+    fi
+
+    echo ""
+    echo "### File Contents"
+    get_files | sort | while IFS= read -r file; do
+        mime=$(file -b --mime-type "$file")
+
+        # Explicitly allow text, json, yaml, and toml
+        if [[ "$mime" == text/* || "$mime" == application/json || "$mime" == application/x-yaml || "$mime" == application/toml ]]; then
+            echo -e "\n========================================"
+            echo "File: $file"
+            echo "========================================"
+            echo '```text'
+            cat "$file"
+            echo '```'
+        fi
+    done
+}
+
+if command -v wl-copy &>/dev/null; then
+    generate_context | wl-copy
+    printf "\033[32m✅ Context dumped from '%s' and copied to Wayland clipboard!\033[0m\n" "$TARGET_DIR"
+else
+    generate_context > /tmp/ctx_dump.txt
+    printf "\033[33m⚠️ wl-copy not found. Context dumped to /tmp/ctx_dump.txt\033[0m\n"
+fi

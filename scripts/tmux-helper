@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# Copyright (c) 2026 doftmoon
+# SPDX-License-Identifier: MIT
+
+show_help() {
+   printf '%s\n' "usage: tmux-helper [OPTIONS] [<args>]
+
+options:
+   -h, --help            Show this help message
+   -s, --session <name>  Create or attach to the session
+   -l, --list            List session and attach to selected
+   -f, --find            Show project finder menu
+
+For project specific configuration create '.layout.tmux' file in project root.
+.layout.tmux example:
+   rename-window 'server'
+   send-keys 'source .venv/bin/activate && python main.py' Enter
+
+   new-window -n 'editor'
+   send-keys 'source .venv/bin/activate && nvim .' Enter
+
+   select-window -t 1"
+}
+
+init_project_config() {
+   local session_name="$1"
+   local target_dir="$2"
+   local project_config="$target_dir/.layout.tmux"
+
+   if [[ -f $project_config ]]; then
+      tmux source-file "$project_config"
+   else
+      tmux send-keys -t "$session_name" "clear && ls" Enter
+   fi
+}
+
+create_or_attach_session() {
+   local session_name="$1"
+   local target_dir="${2:-$HOME}"
+
+   # check if run inside tmux to avoid error
+   if [[ -v TMUX ]]; then
+      if ! tmux has-session -t "$session_name" 2>/dev/null; then
+         tmux new-session -d -s "$session_name" -c "$target_dir"
+         init_project_config "$session_name" "$target_dir"
+      fi
+      tmux switch-client -t "$session_name"
+   else
+      ! tmux has-session -t "$session_name" &&
+         { tmux new-session -d -s "$session_name" -c "$target_dir";
+         init_project_config "$session_name" "$target_dir"; }
+      tmux attach-session -t "$session_name"
+   fi
+}
+
+switch_active_session() {
+   local session_name
+
+   if [[ -v TMUX ]]; then
+      local current_session
+      current_session=$(tmux display-message -p '#S')
+      session_name=$(tmux list-sessions -F '#S' 2>/dev/null | grep -v "^${current_session}$" | fzf --reverse --prompt='Switch Session: ')
+   else
+      session_name=$(tmux list-sessions -F '#S' 2>/dev/null | fzf --reverse --prompt='Attach Session: ')
+   fi
+
+   [[ -z "$session_name" ]] && exit 0
+
+   create_or_attach_session "$session_name"
+}
+
+find_project() {
+   local target_dir
+   target_dir=$(find ~/personal ~/uni ~/work \
+      -mindepth 1 \
+      -maxdepth 1 \
+      -type d 2>/dev/null |
+      fzf --preview 'ls -tp {} --color=always')
+
+   [[ -z "$target_dir" ]] && exit 0
+
+   target_dir="${target_dir%/}"
+   local session_name="${target_dir##*/}"
+   session_name="${session_name//[ .:]/_}"
+
+   create_or_attach_session "$session_name" "$target_dir"
+}
+
+(( $# == 0 )) && { show_help; exit 2; }
+
+while (( $# > 0 )); do
+   case "$1" in
+      -h | --help)
+         show_help
+         exit 0
+         ;;
+      -s | --session)
+         [[ -z ${2:-} ]] && { printf 'Parameter -s requires a name\n'; exit 1; }
+         create_or_attach_session "$2"
+         shift 2
+         ;;
+      -l | --list)
+         switch_active_session
+         shift
+         ;;
+      -f | --find)
+         find_project
+         shift
+         ;;
+      *)
+         printf 'unknown option: %s\n' "$1"
+         show_help
+         exit 1
+         ;;
+   esac
+done

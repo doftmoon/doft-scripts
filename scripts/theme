@@ -1,43 +1,21 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 doftmoon
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2025 doftmoon
+
 set -euo pipefail
 source doftmoon-shell-utils
 
-THEMES_DIR="$HOME/.config/ataraxia/theme"
-WALLPAPERS_DIR="$HOME/.config/ataraxia/wallpaper"
-CURRENT_WALLPAPER_PATH="$HOME/.config/ataraxia/current/wallpaper.jpg"
-CURRENT_THEME_DIR="$HOME/.config/ataraxia/current/theme"
-CURRENT_THEME_REAL_PATH=$(realpath "$CURRENT_THEME_DIR")
+ATARAXIA_DIR="$HOME/.config/ataraxia"
+THEMES_DIR="$ATARAXIA_DIR/theme"
+WALLPAPERS_DIR="$ATARAXIA_DIR/wallpaper"
+CURRENT_THEME_DIR="$ATARAXIA_DIR/current/theme"
+CURRENT_WALLPAPER_PATH="$ATARAXIA_DIR/current/wallpaper.jpg"
 
-restart_app() {
-   local app="$1"
-
-   pkill -x "$app"
-   setsid "$app" >/dev/null 2>&1 &
-}
-
-update_links() {
-   local theme_path="$1"
-   ln -snf "$theme_path" "$CURRENT_THEME_DIR"
-}
-
-change_bg() {
-   local theme_name=$(basename "$1")
-   local wallpaper_path
-   case "$theme_name" in
-      ataraxia-dark) wallpaper_path="$WALLPAPERS_DIR/cybersigilism.jpg" ;;
-      ataraxia-red) wallpaper_path="$WALLPAPERS_DIR/driving.jpg" ;;
-      arch-lore-accurate) wallpaper_path="$WALLPAPERS_DIR/driving.jpg" ;;
-      doftmoon) wallpaper_path="$WALLPAPERS_DIR/driving.jpg" ;;
-      *) wallpaper_path="$WALLPAPERS_DIR/driving.jpg" ;;
-   esac
-
-   ln -sf "$wallpaper_path" "$CURRENT_WALLPAPER_PATH"
-   hyprctl hyprpaper unload "$CURRENT_WALLPAPER_PATH" -q
-   hyprctl hyprpaper preload "$CURRENT_WALLPAPER_PATH" -q
-   hyprctl hyprpaper wallpaper ",$CURRENT_WALLPAPER_PATH" -q
-}
+if [[ -L "$CURRENT_THEME_DIR" ]]; then
+   CURRENT_THEME_REAL_PATH=$(readlink -f "$CURRENT_THEME_DIR")
+else
+   CURRENT_THEME_REAL_PATH=''
+fi
 
 get_theme_paths() {
    local paths=()
@@ -45,45 +23,63 @@ get_theme_paths() {
    printf "%s\n" "${paths[@]}"
 }
 
-main() {
-   [[ $EUID -eq 0 ]] && { error "Don't run as root!"; }
+#main
+[[ $EUID -eq 0 ]] && { error "Don't run as root!"; }
 
-   declare -gA themes
-   local theme_pathes=()
-   readarray -t theme_pathes < <(get_theme_paths)
+declare -gA themes
+declare -gA theme_wallpapers
+theme_pathes=()
+readarray -t theme_pathes < <(get_theme_paths)
 
-   for path in "${theme_pathes[@]}"; do
-      local basename
-      basename=$(basename "$path")
+for path in "${theme_pathes[@]}"; do
+   [[ -z "$path" ]] && continue
 
-      local name
-      name=$(echo "$basename" | sed -E 's/(^|-)([a-z])/\1\u\2/g; s/-/ /g')
-
-      themes["$name"]="$path"
+   clean_path="${path%/}"
+   basename="${clean_path##*/}"
+   name=""
+   IFS='-' read -ra PARTS <<< "$basename"
+   for part in "${PARTS[@]}"; do
+      name+="${part^} "
    done
+   name="${name% }"
 
-   local theme_names=()
-   readarray -t theme_names < <(printf "%s\n" "${!themes[@]}" | sort)
+   themes["$name"]="$path"
 
-   local choice=$(choose 'Pick a theme' "${theme_names[@]}" 'Cancel')
-   if [[ -z "$choice" || "$choice" == 'Cancel' ]]; then
-      exit 0
-   fi
-
-   local chosen_path="${themes["$choice"]}"
-   if [[ -z "$chosen_path" ]]; then
-      exit 1
-   fi
-
-   if [[ "$chosen_path" != "$CURRENT_THEME_REAL_PATH/" ]]; then
-      change_bg "$chosen_path"
-      update_links "$chosen_path"
-      hyprctl reload -q
-      pkill -SIGUSR2 waybar
-      pkill -SIGUSR2 ghostty
+   if [[ -f "$path/wallpaper.conf" ]]; then
+      read -r wp_name < "$path/wallpaper.conf"
+      theme_wallpapers["$path"]="$wp_name"
    else
-      info 'This theme already applied :3'
+      theme_wallpapers["$path"]="driving.jpg"
    fi
-}
+done
 
-main
+theme_names=()
+readarray -t theme_names < <(printf "%s\n" "${!themes[@]}" | sort)
+
+choice=$(choose 'Pick a theme' "${theme_names[@]}" 'Cancel')
+[[ -z "$choice" || "$choice" == 'Cancel' ]] && exit 0
+
+chosen_path="${themes["$choice"]}"
+[[ $chosen_path == "$CURRENT_THEME_REAL_PATH" ]] &&
+   { info 'This theme already applied :3'; exit 0; }
+
+bg_name="${theme_wallpapers["$chosen_path"]}"
+wallpaper_path="$WALLPAPERS_DIR/$bg_name"
+
+ln -sf "$wallpaper_path" "$CURRENT_WALLPAPER_PATH"
+ln -snf "$chosen_path" "$CURRENT_THEME_DIR"
+
+{
+   pkill -SIGUSR2 waybar &
+   hyprctl hyprpaper wallpaper ",$CURRENT_WALLPAPER_PATH,cover" -q &
+
+   hyprctl reload -q &
+   pkill -SIGUSR2 ghostty &
+   pkill -SIGUSR2 mako &
+
+   tmux list-sessions -F '#{session_id}' 2>/dev/null | while read -r sid; do
+      tmux source-file ~/.config/ataraxia/current/theme/tmux.conf -t "$sid" &>/dev/null &
+   done
+} &>/dev/null
+
+# vim:ft=bash
