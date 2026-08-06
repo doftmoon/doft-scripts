@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 
 slp() {
-  sleep 0.05
+	sleep 0.05
 }
 
 cleanup() {
-  tput cnorm
-  tput sgr0
-  exit
+	tput cnorm
+	tput sgr0
+	exit
 }
 
 trap cleanup INT TERM
@@ -16,7 +16,7 @@ tput civis
 tput clear
 
 man1() {
-cat <<'EOF'
+	cat <<'EOF'
        ~~~~~~~~
        | .  . |
        |   >  |
@@ -42,7 +42,7 @@ EOF
 }
 
 man2() {
-cat <<'EOF'
+	cat <<'EOF'
        ~~~~~~~~
        | .  . |
        |   >  |
@@ -68,7 +68,7 @@ EOF
 }
 
 man3() {
-cat <<'EOF'
+	cat <<'EOF'
        ~~~~~~~~
        | .  . |
        |   >  |
@@ -94,9 +94,16 @@ EOF
 }
 
 while true; do
-  tput cup 0 0; man1; slp
-  tput cup 0 0; man2; slp
-  tput cup 0 0; man3; slp
-  tput cup 0 0; man2; slp
+	tput cup 0 0
+	man1
+	slp
+	tput cup 0 0
+	man2
+	slp
+	tput cup 0 0
+	man3
+	slp
+	tput cup 0 0
+	man2
+	slp
 done
-

@@ -12,15 +12,15 @@ CURRENT_THEME_DIR="$ATARAXIA_DIR/current/theme"
 CURRENT_WALLPAPER_PATH="$ATARAXIA_DIR/current/wallpaper.jpg"
 
 if [[ -L "$CURRENT_THEME_DIR" ]]; then
-   CURRENT_THEME_REAL_PATH=$(readlink -f "$CURRENT_THEME_DIR")
+	CURRENT_THEME_REAL_PATH=$(readlink -f "$CURRENT_THEME_DIR")
 else
-   CURRENT_THEME_REAL_PATH=''
+	CURRENT_THEME_REAL_PATH=''
 fi
 
 get_theme_paths() {
-   local paths=()
-   readarray -t paths < <(fd . "$THEMES_DIR" -d 1 -t d -t l | sort)
-   printf "%s\n" "${paths[@]}"
+	local paths=()
+	readarray -t paths < <(fd . "$THEMES_DIR" -d 1 -t d -t l | sort)
+	printf "%s\n" "${paths[@]}"
 }
 
 #main
@@ -32,25 +32,25 @@ theme_pathes=()
 readarray -t theme_pathes < <(get_theme_paths)
 
 for path in "${theme_pathes[@]}"; do
-   [[ -z "$path" ]] && continue
+	[[ -z "$path" ]] && continue
 
-   clean_path="${path%/}"
-   basename="${clean_path##*/}"
-   name=""
-   IFS='-' read -ra PARTS <<< "$basename"
-   for part in "${PARTS[@]}"; do
-      name+="${part^} "
-   done
-   name="${name% }"
+	clean_path="${path%/}"
+	basename="${clean_path##*/}"
+	name=""
+	IFS='-' read -ra PARTS <<<"$basename"
+	for part in "${PARTS[@]}"; do
+		name+="${part^} "
+	done
+	name="${name% }"
 
-   themes["$name"]="$path"
+	themes["$name"]="$path"
 
-   if [[ -f "$path/wallpaper.conf" ]]; then
-      read -r wp_name < "$path/wallpaper.conf"
-      theme_wallpapers["$path"]="$wp_name"
-   else
-      theme_wallpapers["$path"]="driving.jpg"
-   fi
+	if [[ -f "$path/wallpaper.conf" ]]; then
+		read -r wp_name <"$path/wallpaper.conf"
+		theme_wallpapers["$path"]="$wp_name"
+	else
+		theme_wallpapers["$path"]="driving.jpg"
+	fi
 done
 
 theme_names=()
@@ -61,7 +61,10 @@ choice=$(choose 'Pick a theme' "${theme_names[@]}" 'Cancel')
 
 chosen_path="${themes["$choice"]}"
 [[ $chosen_path == "$CURRENT_THEME_REAL_PATH" ]] &&
-   { info 'This theme already applied :3'; exit 0; }
+	{
+		info 'This theme already applied :3'
+		exit 0
+	}
 
 bg_name="${theme_wallpapers["$chosen_path"]}"
 wallpaper_path="$WALLPAPERS_DIR/$bg_name"
@@ -70,16 +73,16 @@ ln -sf "$wallpaper_path" "$CURRENT_WALLPAPER_PATH"
 ln -snf "$chosen_path" "$CURRENT_THEME_DIR"
 
 {
-   pkill -SIGUSR2 waybar &
-   hyprctl hyprpaper wallpaper ",$CURRENT_WALLPAPER_PATH,cover" -q &
+	pkill -SIGUSR2 waybar &
+	hyprctl hyprpaper wallpaper ",$CURRENT_WALLPAPER_PATH,cover" -q &
 
-   hyprctl reload -q &
-   pkill -SIGUSR2 ghostty &
-   pkill -SIGUSR2 mako &
+	hyprctl reload -q &
+	pkill -SIGUSR2 ghostty &
+	pkill -SIGUSR2 mako &
 
-   tmux list-sessions -F '#{session_id}' 2>/dev/null | while read -r sid; do
-      tmux source-file ~/.config/ataraxia/current/theme/tmux.conf -t "$sid" &>/dev/null &
-   done
+	tmux list-sessions -F '#{session_id}' 2>/dev/null | while read -r sid; do
+		tmux source-file ~/.config/ataraxia/current/theme/tmux.conf -t "$sid" &>/dev/null &
+	done
 } &>/dev/null
 
 # vim:ft=bash

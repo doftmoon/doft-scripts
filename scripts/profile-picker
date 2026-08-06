@@ -13,51 +13,51 @@ MONITOR_PRIMARY='eDP-1'
 MONITOR_SECONDARY='HDMI-A-1'
 
 home_profile() {
-   info 'Activating HOME profile...'
-   #firewall-configer trusted
+	info 'Activating HOME profile...'
+	#firewall-configer trusted
 
-   hyprctl dispatch exec "[workspace 1 silent]" "$TERMINAL"
-   hyprctl dispatch exec "[workspace 2 silent]" "$BROWSER"
+	hyprctl dispatch exec "[workspace 1 silent]" "$TERMINAL"
+	hyprctl dispatch exec "[workspace 2 silent]" "$BROWSER"
 }
 
 work_profile() {
-   info 'Activating WORK profile...'
-   #firewall-configer trusted
+	info 'Activating WORK profile...'
+	#firewall-configer trusted
 
-   hyprctl dispatch exec "[workspace 1 silent]" "$TERMINAL"
-   hyprctl dispatch exec "[workspace 2 silent]" "$BROWSER"
+	hyprctl dispatch exec "[workspace 1 silent]" "$TERMINAL"
+	hyprctl dispatch exec "[workspace 2 silent]" "$BROWSER"
 }
 
 public_profile() {
-   info 'Activating PUBLIC profile...'
-   #firewall-configer public
+	info 'Activating PUBLIC profile...'
+	#firewall-configer public
 
-   hyprctl dispatch exec "[workspace 1 silent]" "$TERMINAL"
+	hyprctl dispatch exec "[workspace 1 silent]" "$TERMINAL"
 }
 
 picker() {
-   local options=('1) HOME' '2) WORK' '3) PUBLIC')
-   local choice=$(printf "%s\n" "${options[@]}" |
-      fzf --prompt='Select your session profile: ' \
-         --height=20% \
-         --border \
-         --cycle)
-   sudo -v
+	local options=('1) HOME' '2) WORK' '3) PUBLIC')
+	local choice=$(printf "%s\n" "${options[@]}" |
+		fzf --prompt='Select your session profile: ' \
+			--height=20% \
+			--border \
+			--cycle)
+	sudo -v
 
-   case "$choice" in
-      '1) HOME') home_profile ;;
-      '2) WORK') work_profile ;;
-      '3) PUBLIC') public_profile ;;
-      *) error 'No profile selected. Aborting setup.' ;;
-   esac
+	case "$choice" in
+	'1) HOME') home_profile ;;
+	'2) WORK') work_profile ;;
+	'3) PUBLIC') public_profile ;;
+	*) error 'No profile selected. Aborting setup.' ;;
+	esac
 
-   info 'Session setup complete.'
-   sleep 1
+	info 'Session setup complete.'
+	sleep 1
 }
 
 main() {
-   ensure_not_root
-   picker
+	ensure_not_root
+	picker
 }
 
 main

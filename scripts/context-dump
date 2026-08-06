@@ -2,65 +2,110 @@
 # Copyright (c) 2026 doftmoon
 # SPDX-License-Identifier: MIT
 #
-# script to help you dump your project to agent
+# reqursivelly copies your files from pwd to clipboard
+# I personally use it to dump my projects to chat LLMs as they have huge context
+# and work pretty well and cheap with that lots of text tokens
+
+set -euo pipefail
 
 TARGET_DIR="${1:-.}"
 
-TREE_IGNORE=".git|.env|.cache|*.bak|.ansible|.vagrant|.venv|__pycache__|node_modules|artifacts|.ruff_cache"
+EXCLUDES=(
+   ".git"
+   ".env*"
+   ".cache"
+   "*.bak"
+   ".ansible"
+   ".vagrant"
+   ".venv"
+   "__pycache__"
+   ".ruff_cache"
+   "node_modules"
+   "artifacts"
+   ".obsidian"
+   "Excalidraw"
+   ".DS_Store"
+   "*.swp"
+)
+
+# Dynamically construct arguments for the different tools
+FD_EXCLUDES=()
+FIND_EXCLUDES=()
+for ex in "${EXCLUDES[@]}"; do
+   FD_EXCLUDES+=("-E" "$ex")
+   [[ ${#FIND_EXCLUDES[@]} -gt 0 ]] && FIND_EXCLUDES+=("-o")
+   FIND_EXCLUDES+=("-name" "$ex")
+done
+
+TREE_IGNORE=$(
+   IFS="|"
+   echo "${EXCLUDES[*]}"
+)
 
 get_files() {
-   if command -v fd &>/dev/null; then
-      fd --type f --hidden \
-         -E ".git" -E ".obsidian" -E "node_modules" -E ".venv" -E ".cache" -E "__pycache__" \
-         -E "artifacts" -E ".ruff_cache" -E ".env" -E ".DS_Store" -E "*.swp" -E "*.bak" \
-         . "$TARGET_DIR"
+   if command -v fd >/dev/null 2>&1; then
+      fd --type f --hidden "${FD_EXCLUDES[@]}" . "$TARGET_DIR"
    else
-      local prune=( -type d \( -name ".git" \
-         -o -name ".obsidian" \
-         -o -name ".cache" \
-         -o -name ".ansible" \
-         -o -name ".vagrant" \
-         -o -name ".venv" \
-         -o -name "__pycache__" \
-         -o -name "node_modules" \
-         -o -name "artifacts" \
-         -o -name ".ruff_cache" \) -prune -o)
-      local files=( -type f ! -name ".env" \
-         ! -name "*.bak" \
-         ! -name ".DS_Store" -print )
-      find "$TARGET_DIR" "${prune[@]}" "${files[@]}"
+      find "$TARGET_DIR" \( "${FIND_EXCLUDES[@]}" \) -prune -o -type f -print
    fi
 }
 
 generate_context() {
-    echo "### Directory Tree"
-    if command -v tree &>/dev/null; then
-        tree -a -I "$TREE_IGNORE" --noreport "$TARGET_DIR"
-    else
-        get_files | sort | sed -e 's/[^-][^\/]*\// |/g' -e 's/|\([^ ]\)/|-\1/'
-    fi
+   echo "### Directory Tree"
+   if command -v tree >/dev/null 2>&1; then
+      tree -a -I "$TREE_IGNORE" --noreport "$TARGET_DIR"
+   else
+      get_files | sort | sed -e 's/[^-][^\/]*\// |/g' -e 's/|\([^ ]\)/|-\1/'
+   fi
 
-    echo ""
-    echo "### File Contents"
-    get_files | sort | while IFS= read -r file; do
-        mime=$(file -b --mime-type "$file")
+   echo -e "\n### File Contents"
 
-        # Explicitly allow text, json, yaml, and toml
-        if [[ "$mime" == text/* || "$mime" == application/json || "$mime" == application/x-yaml || "$mime" == application/toml ]]; then
-            echo -e "\n========================================"
-            echo "File: $file"
-            echo "========================================"
-            echo '```text'
-            cat "$file"
-            echo '```'
-        fi
-    done
+   local has_file=false
+   command -v file >/dev/null 2>&1 && has_file=true
+
+   while IFS= read -r f; do
+      [[ -z "$f" ]] && continue
+
+      local is_text=true
+      if $has_file; then
+         local mime
+         mime=$(file -b --mime-type "$f")
+
+         # If it is NOT one of our allowed types, mark as non-text
+         if [[ "$mime" != text/* && "$mime" != application/json && "$mime" != application/x-yaml && "$mime" != application/toml ]]; then
+            is_text=false
+         fi
+      fi
+
+      if $is_text; then
+         printf '\n========================================\nFile: %s\n========================================\n```text\n' "$f"
+         cat "$f" || true
+         printf '\n```\n'
+      fi
+   done < <(get_files | sort)
 }
 
-if command -v wl-copy &>/dev/null; then
-    generate_context | wl-copy
-    printf "\033[32m✅ Context dumped from '%s' and copied to Wayland clipboard!\033[0m\n" "$TARGET_DIR"
-else
-    generate_context > /tmp/ctx_dump.txt
-    printf "\033[33m⚠️ wl-copy not found. Context dumped to /tmp/ctx_dump.txt\033[0m\n"
-fi
+copy_to_clipboard() {
+   local clipboard_name=""
+
+   if command -v wl-copy >/dev/null 2>&1; then
+      wl-copy
+      clipboard_name="Wayland clipboard (wl-copy)"
+   elif command -v xclip >/dev/null 2>&1; then
+      xclip -selection clipboard
+      clipboard_name="X11 clipboard (xclip)"
+   elif command -v xsel >/dev/null 2>&1; then
+      xsel --clipboard --input
+      clipboard_name="X11 clipboard (xsel)"
+   else
+      cat >/tmp/ctx_dump.txt
+      printf "No clipboard utility found. Context dumped to /tmp/ctx_dump.txt\n"
+      return
+   fi
+
+   printf "Context dumped from '%s' and copied to %s.\n" "$TARGET_DIR" "$clipboard_name"
+}
+
+generate_context | copy_to_clipboard
+
+# vim:ft=bash
