@@ -11,99 +11,99 @@ set -euo pipefail
 TARGET_DIR="${1:-.}"
 
 EXCLUDES=(
-   ".git"
-   ".env*"
-   ".cache"
-   "*.bak"
-   ".ansible"
-   ".vagrant"
-   ".venv"
-   "__pycache__"
-   ".ruff_cache"
-   "node_modules"
-   "artifacts"
-   ".obsidian"
-   "Excalidraw"
-   ".DS_Store"
-   "*.swp"
+	".git"
+	".env*"
+	".cache"
+	"*.bak"
+	".ansible"
+	".vagrant"
+	".venv"
+	"__pycache__"
+	".ruff_cache"
+	"node_modules"
+	"artifacts"
+	".obsidian"
+	"Excalidraw"
+	".DS_Store"
+	"*.swp"
 )
 
 # Dynamically construct arguments for the different tools
 FD_EXCLUDES=()
 FIND_EXCLUDES=()
 for ex in "${EXCLUDES[@]}"; do
-   FD_EXCLUDES+=("-E" "$ex")
-   [[ ${#FIND_EXCLUDES[@]} -gt 0 ]] && FIND_EXCLUDES+=("-o")
-   FIND_EXCLUDES+=("-name" "$ex")
+	FD_EXCLUDES+=("-E" "$ex")
+	[[ ${#FIND_EXCLUDES[@]} -gt 0 ]] && FIND_EXCLUDES+=("-o")
+	FIND_EXCLUDES+=("-name" "$ex")
 done
 
 TREE_IGNORE=$(
-   IFS="|"
-   echo "${EXCLUDES[*]}"
+	IFS="|"
+	echo "${EXCLUDES[*]}"
 )
 
 get_files() {
-   if command -v fd >/dev/null 2>&1; then
-      fd --type f --hidden "${FD_EXCLUDES[@]}" . "$TARGET_DIR"
-   else
-      find "$TARGET_DIR" \( "${FIND_EXCLUDES[@]}" \) -prune -o -type f -print
-   fi
+	if command -v fd >/dev/null 2>&1; then
+		fd --type f --hidden "${FD_EXCLUDES[@]}" . "$TARGET_DIR"
+	else
+		find "$TARGET_DIR" \( "${FIND_EXCLUDES[@]}" \) -prune -o -type f -print
+	fi
 }
 
 generate_context() {
-   echo "### Directory Tree"
-   if command -v tree >/dev/null 2>&1; then
-      tree -a -I "$TREE_IGNORE" --noreport "$TARGET_DIR"
-   else
-      get_files | sort | sed -e 's/[^-][^\/]*\// |/g' -e 's/|\([^ ]\)/|-\1/'
-   fi
+	echo "### Directory Tree"
+	if command -v tree >/dev/null 2>&1; then
+		tree -a -I "$TREE_IGNORE" --noreport "$TARGET_DIR"
+	else
+		get_files | sort | sed -e 's/[^-][^\/]*\// |/g' -e 's/|\([^ ]\)/|-\1/'
+	fi
 
-   echo -e "\n### File Contents"
+	echo -e "\n### File Contents"
 
-   local has_file=false
-   command -v file >/dev/null 2>&1 && has_file=true
+	local has_file=false
+	command -v file >/dev/null 2>&1 && has_file=true
 
-   while IFS= read -r f; do
-      [[ -z "$f" ]] && continue
+	while IFS= read -r f; do
+		[[ -z "$f" ]] && continue
 
-      local is_text=true
-      if $has_file; then
-         local mime
-         mime=$(file -b --mime-type "$f")
+		local is_text=true
+		if $has_file; then
+			local mime
+			mime=$(file -b --mime-type "$f")
 
-         # If it is NOT one of our allowed types, mark as non-text
-         if [[ "$mime" != text/* && "$mime" != application/json && "$mime" != application/x-yaml && "$mime" != application/toml ]]; then
-            is_text=false
-         fi
-      fi
+			# If it is NOT one of our allowed types, mark as non-text
+			if [[ "$mime" != text/* && "$mime" != application/json && "$mime" != application/x-yaml && "$mime" != application/toml ]]; then
+				is_text=false
+			fi
+		fi
 
-      if $is_text; then
-         printf '\n========================================\nFile: %s\n========================================\n```text\n' "$f"
-         cat "$f" || true
-         printf '\n```\n'
-      fi
-   done < <(get_files | sort)
+		if $is_text; then
+			printf '\n========================================\nFile: %s\n========================================\n```text\n' "$f"
+			cat "$f" || true
+			printf '\n```\n'
+		fi
+	done < <(get_files | sort)
 }
 
 copy_to_clipboard() {
-   local clipboard_name=""
+	local clipboard_name=""
 
-   if command -v wl-copy >/dev/null 2>&1; then
-      wl-copy
-      clipboard_name="Wayland clipboard (wl-copy)"
-   elif command -v xclip >/dev/null 2>&1; then
-      xclip -selection clipboard
-      clipboard_name="X11 clipboard (xclip)"
-   elif command -v xsel >/dev/null 2>&1; then
-      xsel --clipboard --input
-      clipboard_name="X11 clipboard (xsel)"
-   else
-      cat >/tmp/ctx_dump.txt
-      printf "No clipboard utility found. Context dumped to /tmp/ctx_dump.txt\n"
-      return
-   fi
+	if command -v wl-copy >/dev/null 2>&1; then
+		wl-copy
+		clipboard_name="Wayland clipboard (wl-copy)"
+	elif command -v xclip >/dev/null 2>&1; then
+		xclip -selection clipboard
+		clipboard_name="X11 clipboard (xclip)"
+	elif command -v xsel >/dev/null 2>&1; then
+		xsel --clipboard --input
+		clipboard_name="X11 clipboard (xsel)"
+	else
+		cat >/tmp/ctx_dump.txt
+		printf "No clipboard utility found. Context dumped to /tmp/ctx_dump.txt\n"
+		return
+	fi
 
-   printf "Context dumped from '%s' and copied to %s.\n" "$TARGET_DIR" "$clipboard_name"
+	printf "Context dumped from '%s' and copied to %s.\n" "$TARGET_DIR" "$clipboard_name"
 }
 
 generate_context | copy_to_clipboard

@@ -1,88 +1,111 @@
-#!/usr/bin/env bash
+#!/usr/bin/env osh
 # Copyright (c) 2026 doftmoon
 # SPDX-License-Identifier: MIT
 
 set -euo pipefail
-source doftmoon-shell-utils
+shopt -s nullglob
 
-ATARAXIA_DIR="$HOME/.config/ataraxia"
-THEMES_DIR="$ATARAXIA_DIR/theme"
-WALLPAPERS_DIR="$ATARAXIA_DIR/wallpaper"
-CURRENT_THEME_DIR="$ATARAXIA_DIR/current/theme"
-CURRENT_WALLPAPER_PATH="$ATARAXIA_DIR/current/wallpaper.jpg"
+readonly ATARAXIA_DIR="$HOME/.config/ataraxia"
+readonly THEMES_DIR="$ATARAXIA_DIR/theme"
+readonly WALLPAPERS_DIR="$ATARAXIA_DIR/wallpaper"
+readonly CURRENT_THEME_DIR="$ATARAXIA_DIR/current/theme"
+readonly CURRENT_WALLPAPER_PATH="$ATARAXIA_DIR/current/wallpaper.jpg"
 
-if [[ -L "$CURRENT_THEME_DIR" ]]; then
-	CURRENT_THEME_REAL_PATH=$(readlink -f "$CURRENT_THEME_DIR")
-else
-	CURRENT_THEME_REAL_PATH=''
-fi
-
-get_theme_paths() {
-	local paths=()
-	readarray -t paths < <(fd . "$THEMES_DIR" -d 1 -t d -t l | sort)
-	printf "%s\n" "${paths[@]}"
+die() {
+	printf '\033[31mERROR:\033[0m %s\n' "$1" >&2
+	exit 1
 }
 
-#main
-[[ $EUID -eq 0 ]] && { error "Don't run as root!"; }
+[[ $EUID -ne 0 ]] || die "Don't run as root!"
+[[ $# -le 1 ]] || die 'Usage: theme [THEME|--reload]'
 
-declare -gA themes
-declare -gA theme_wallpapers
-theme_pathes=()
-readarray -t theme_pathes < <(get_theme_paths)
+chosen_path=''
 
-for path in "${theme_pathes[@]}"; do
-	[[ -z "$path" ]] && continue
-
-	clean_path="${path%/}"
-	basename="${clean_path##*/}"
-	name=""
-	IFS='-' read -ra PARTS <<<"$basename"
-	for part in "${PARTS[@]}"; do
-		name+="${part^} "
+# Passing a directory name avoids all theme discovery and picker work. This is
+# the fastest path for keybindings: `theme ataraxia-dark`.
+if [[ ${1-} == '--reload' ]]; then
+	for path in "$THEMES_DIR"/*/; do
+		[[ $CURRENT_THEME_DIR -ef $path ]] && {
+			chosen_path=${path%/}
+			break
+		}
 	done
-	name="${name% }"
+	[[ -n $chosen_path ]] || die 'The current theme link is missing or invalid.'
+elif [[ -n ${1-} ]]; then
+	[[ $1 != */* ]] || die 'Pass a theme directory name, not a path.'
+	chosen_path="$THEMES_DIR/${1%/}"
+	[[ -d $chosen_path ]] || die "Theme not found: $1"
+else
+	theme_paths=()
+	theme_names=()
 
-	themes["$name"]="$path"
+	# Shell globbing is already sorted and avoids spawning fd and sort.
+	for path in "$THEMES_DIR"/*/; do
+		path=${path%/}
+		basename=${path##*/}
+		name=''
+		IFS=- read -r -a parts <<< "$basename"
+		for part in "${parts[@]}"; do
+			name+="${part^} "
+		done
+		theme_paths+=("$path")
+		theme_names+=("${name% }")
+	done
+	((${#theme_names[@]})) || die "No themes found in $THEMES_DIR"
 
-	if [[ -f "$path/wallpaper.conf" ]]; then
-		read -r wp_name <"$path/wallpaper.conf"
-		theme_wallpapers["$path"]="$wp_name"
+	if command -v gum >/dev/null 2>&1; then
+		choice=$(gum choose --cursor.foreground 12 --header='Pick a theme' \
+			--header.foreground 12 "${theme_names[@]}" Cancel)
+	elif command -v fzf >/dev/null 2>&1; then
+		choice=$(printf '%s\n' "${theme_names[@]}" Cancel | \
+			fzf --prompt='Pick a theme: ' --height=20% --border --cycle)
 	else
-		theme_wallpapers["$path"]="driving.jpg"
+		for ((i = 0; i < ${#theme_names[@]}; ++i)); do
+			printf '%d) %s\n' "$((i + 1))" "${theme_names[i]}" >&2
+		done
+		printf '%d) Cancel\nPick a theme: ' "$((${#theme_names[@]} + 1))" >&2
+		read -r selection
+		[[ $selection =~ ^[0-9]+$ ]] || die 'Invalid selection.'
+		if ((selection == ${#theme_names[@]} + 1)); then
+			exit 0
+		fi
+		((selection >= 1 && selection <= ${#theme_names[@]})) || die 'Invalid selection.'
+		choice=${theme_names[selection - 1]}
 	fi
-done
 
-theme_names=()
-readarray -t theme_names < <(printf "%s\n" "${!themes[@]}" | sort)
-
-choice=$(choose 'Pick a theme' "${theme_names[@]}" 'Cancel')
-[[ -z "$choice" || "$choice" == 'Cancel' ]] && exit 0
-
-chosen_path="${themes["$choice"]}"
-[[ $chosen_path == "$CURRENT_THEME_REAL_PATH" ]] &&
-	{
-		info 'This theme already applied :3'
-		exit 0
-	}
-
-bg_name="${theme_wallpapers["$chosen_path"]}"
-wallpaper_path="$WALLPAPERS_DIR/$bg_name"
-
-ln -sf "$wallpaper_path" "$CURRENT_WALLPAPER_PATH"
-ln -snf "$chosen_path" "$CURRENT_THEME_DIR"
-
-{
-	pkill -SIGUSR2 waybar &
-	hyprctl hyprpaper wallpaper ",$CURRENT_WALLPAPER_PATH,cover" -q &
-
-	hyprctl reload -q &
-	pkill -SIGUSR2 ghostty &
-	pkill -SIGUSR2 mako &
-
-	tmux list-sessions -F '#{session_id}' 2>/dev/null | while read -r sid; do
-		tmux source-file ~/.config/ataraxia/current/theme/tmux.conf -t "$sid" &>/dev/null &
+	[[ -n $choice && $choice != Cancel ]] || exit 0
+	for ((i = 0; i < ${#theme_names[@]}; ++i)); do
+		[[ ${theme_names[i]} == "$choice" ]] && {
+			chosen_path=${theme_paths[i]}
+			break
+		}
 	done
-} &>/dev/null
+	[[ -n $chosen_path ]] || die 'Invalid theme selection.'
+fi
 
-# vim:ft=bash
+bg_name='driving.jpg'
+if [[ -f $chosen_path/wallpaper.conf ]]; then
+	IFS= read -r bg_name < "$chosen_path/wallpaper.conf" || [[ -n $bg_name ]]
+fi
+wallpaper_path="$WALLPAPERS_DIR/$bg_name"
+[[ -f $wallpaper_path ]] || die "Wallpaper not found: $wallpaper_path"
+
+# Avoid two external ln calls when merely reloading the current theme.
+[[ -L $CURRENT_WALLPAPER_PATH && $CURRENT_WALLPAPER_PATH -ef $wallpaper_path ]] ||
+	ln -sf "$wallpaper_path" "$CURRENT_WALLPAPER_PATH"
+[[ -L $CURRENT_THEME_DIR && $CURRENT_THEME_DIR -ef $chosen_path ]] ||
+	ln -snf "$chosen_path" "$CURRENT_THEME_DIR"
+
+# These targets are independent. Start them concurrently and return as soon as
+# they have been dispatched. One pkill scan handles all signal-based reloads.
+pkill -USR2 -x 'waybar|ghostty|mako' >/dev/null 2>&1 &
+hyprctl hyprpaper wallpaper ",$CURRENT_WALLPAPER_PATH,cover" -q >/dev/null 2>&1 &
+hyprctl reload -q >/dev/null 2>&1 &
+(
+	tmux list-sessions -F '#{session_id}' 2>/dev/null |
+		while read -r sid; do
+			tmux source-file "$CURRENT_THEME_DIR/tmux.conf" -t "$sid" >/dev/null 2>&1 &
+		done
+) >/dev/null 2>&1 &
+
+# vim:ft=sh
